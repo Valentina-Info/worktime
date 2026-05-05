@@ -1,0 +1,153 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  MANAGER
+  ADMIN
+}
+
+enum Status {
+  ACTIVE
+  ARCHIVED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String   // hashed
+  role      Role     @default(USER)
+  teamId    String?
+  team      Team?    @relation(fields: [teamId], references: [id])
+  rate      Float?   // personal rate
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  timeEntries TimeEntry[]
+  expenses    Expense[]
+  assignedProjects Project[] @relation("ProjectUsers")
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  users     User[]
+  createdAt DateTime @default(now())
+}
+
+model Client {
+  id          String   @id @default(cuid())
+  name        String
+  contact     String?
+  address     String?
+  currency    String   @default("USD")
+  status      Status   @default(ACTIVE)
+  customFields Json?   // for additional fields
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projects    Project[]
+  expenses    Expense[]
+  invoices    Invoice[]
+}
+
+model Project {
+  id          String     @id @default(cuid())
+  name        String
+  clientId    String
+  client      Client     @relation(fields: [clientId], references: [id])
+  description String?
+  budgetHours Float?
+  budgetMoney Float?
+  rate        Float?     // project rate
+  status      Status     @default(ACTIVE)
+  customFields Json?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  activities  Activity[]
+  timeEntries TimeEntry[]
+  expenses    Expense[]
+  users       User[]     @relation("ProjectUsers")
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  name      String
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+  rate      Float?   // activity rate
+  status    Status   @default(ACTIVE)
+  createdAt DateTime @default(now())
+
+  timeEntries TimeEntry[]
+}
+
+model TimeEntry {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id])
+  activityId  String
+  activity    Activity  @relation(fields: [activityId], references: [id])
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Int       // in minutes
+  description String?
+  billable    Boolean   @default(true)
+  rate        Float?    // specific rate
+  tags        String[]  // array of tags
+  locked      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id])
+  amount      Float
+  currency    String   @default("USD")
+  description String?
+  date        DateTime
+  locked      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model Invoice {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  number      String   @unique
+  total       Float
+  currency    String   @default("USD")
+  status      InvoiceStatus @default(DRAFT)
+  pdfUrl      String?
+  createdAt   DateTime @default(now())
+
+  // For simplicity, store IDs as JSON or use join tables later
+  timeEntryIds String[] // array of TimeEntry IDs
+  expenseIds   String[] // array of Expense IDs
+}
