@@ -56,6 +56,8 @@ model Client {
   id          String   @id @default(cuid())
   name        String
   contact     String?
+  email       String?
+  phone       String?
   address     String?
   currency    String   @default("USD")
   status      Status   @default(ACTIVE)
