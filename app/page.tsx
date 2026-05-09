@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { signOut, useSession } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
+import AppShell from '@/components/AppShell';
 
 type ClientOption = {
   id: string;
@@ -160,6 +160,19 @@ export default function Home() {
     return Math.max(1, Math.round((timerTick - timerStartedAt) / 60000));
   }, [timerStartedAt, timerTick]);
 
+  const todayMinutes = useMemo(() => {
+    const today = new Date().toDateString();
+
+    return entries
+      .filter((entry) => new Date(entry.startTime).toDateString() === today)
+      .reduce((sum, entry) => sum + entry.duration, 0);
+  }, [entries]);
+
+  const billableMinutes = useMemo(
+    () => entries.filter((entry) => entry.billable).reduce((sum, entry) => sum + entry.duration, 0),
+    [entries],
+  );
+
   async function createTimeEntry(startTime: Date, duration: number, endTime: Date | null) {
     setIsSaving(true);
     setError('');
@@ -227,28 +240,26 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <header className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm text-slate-500">Signed in as {session.user?.email}</p>
-            <h1 className="text-2xl font-semibold">Time tracking MVP</h1>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Link className="rounded-md border border-slate-300 px-4 py-2 text-center text-sm font-medium" href="/clients">
-              Clients
-            </Link>
-            <Link className="rounded-md border border-slate-300 px-4 py-2 text-center text-sm font-medium" href="/projects">
-              Projects
-            </Link>
-            <button
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
-              onClick={() => signOut()}
-            >
-              Sign out
-            </button>
-          </div>
-        </header>
+    <AppShell
+      eyebrow="Workspace"
+      subtitle="Start a timer, add manual time, and scan the latest work log from one focused screen."
+      title="Time tracking"
+      userEmail={session.user?.email}
+    >
+      <section className="grid gap-4 sm:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-sm font-medium text-slate-500">Today</div>
+          <div className="mt-2 text-2xl font-semibold tabular-nums">{formatDuration(todayMinutes)}</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-sm font-medium text-slate-500">Billable in view</div>
+          <div className="mt-2 text-2xl font-semibold tabular-nums">{formatDuration(billableMinutes)}</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-sm font-medium text-slate-500">Entries loaded</div>
+          <div className="mt-2 text-2xl font-semibold tabular-nums">{entries.length}</div>
+        </div>
+      </section>
 
         {error && <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
@@ -316,14 +327,14 @@ export default function Home() {
                 Billable
               </label>
 
-              <div className="rounded-md bg-slate-100 px-4 py-5 text-center">
-                <div className="text-sm text-slate-500">Current timer</div>
-                <div className="mt-1 text-4xl font-semibold tabular-nums">{formatDuration(elapsedMinutes)}</div>
+              <div className="rounded-lg border border-cyan-200 bg-gradient-to-br from-[var(--brand-blue)] to-[var(--brand-cyan)] px-4 py-6 text-center text-white shadow-sm shadow-cyan-100">
+                <div className="text-sm text-cyan-50">Current timer</div>
+                <div className="mt-1 text-5xl font-semibold tabular-nums">{formatDuration(elapsedMinutes)}</div>
               </div>
 
               {timerStartedAt ? (
                 <button
-                  className="rounded-md bg-red-600 px-4 py-3 font-medium text-white disabled:opacity-60"
+                  className="rounded-md bg-red-600 px-4 py-3 font-medium text-white shadow-sm transition hover:bg-red-700 disabled:opacity-60"
                   disabled={isSaving}
                   onClick={stopTimer}
                 >
@@ -331,7 +342,7 @@ export default function Home() {
                 </button>
               ) : (
                 <button
-                  className="rounded-md bg-emerald-600 px-4 py-3 font-medium text-white disabled:opacity-60"
+                  className="rounded-md bg-[var(--brand-cyan)] px-4 py-3 font-medium text-white shadow-sm transition hover:bg-cyan-700 disabled:opacity-60"
                   disabled={!selectedProjectId || !selectedActivityId}
                   onClick={startTimer}
                 >
@@ -366,7 +377,7 @@ export default function Home() {
               </label>
 
               <button
-                className="rounded-md bg-blue-600 px-4 py-3 font-medium text-white disabled:opacity-60"
+                className="rounded-md bg-[var(--brand-blue)] px-4 py-3 font-medium text-white shadow-sm transition hover:bg-[var(--brand-blue-dark)] disabled:opacity-60"
                 disabled={isSaving || !selectedProjectId || !selectedActivityId}
                 type="submit"
               >
@@ -416,7 +427,6 @@ export default function Home() {
             </table>
           </div>
         </section>
-      </div>
-    </main>
+    </AppShell>
   );
 }

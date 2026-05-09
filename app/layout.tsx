@@ -1,10 +1,10 @@
-import type { Metadata } from "next";
-import "./globals.css";
-import Providers from "../components/Providers";
+import type { Metadata } from 'next';
+import './globals.css';
+import Providers from '../components/Providers';
 
 export const metadata: Metadata = {
-  title: "Time Tracking System",
-  description: "Система учёта рабочего времени",
+  title: 'Trackdesk',
+  description: 'Time tracking workspace',
 };
 
 export default function RootLayout({
@@ -13,8 +13,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">
+    <html lang="en" className="h-full antialiased">
+      <body className="min-h-full">
         <Providers>{children}</Providers>
       </body>
     </html>

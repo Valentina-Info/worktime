@@ -1,9 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signOut, useSession } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
+import AppShell from '@/components/AppShell';
 
 type Client = {
   id: string;
@@ -202,25 +202,12 @@ export default function ProjectsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-sm text-slate-500">Project directory</p>
-            <h1 className="text-2xl font-semibold">Projects</h1>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Link className="rounded-md border border-slate-300 px-4 py-2 text-center text-sm font-medium" href="/">
-              Time tracking
-            </Link>
-            <Link className="rounded-md border border-slate-300 px-4 py-2 text-center text-sm font-medium" href="/clients">
-              Clients
-            </Link>
-            <button className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white" onClick={() => signOut()}>
-              Sign out
-            </button>
-          </div>
-        </header>
+    <AppShell
+      eyebrow="Directory"
+      subtitle="Keep project budgets, rates, activity usage, and archive state in one place."
+      title="Projects"
+      userEmail={session.user?.email}
+    >
 
         {error && <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
@@ -335,7 +322,7 @@ export default function ProjectsPage() {
           </div>
 
           <div className="mt-5 flex justify-end">
-            <button className="rounded-md bg-blue-600 px-4 py-2 font-medium text-white disabled:opacity-60" disabled={isSaving} type="submit">
+            <button className="rounded-md bg-[var(--brand-blue)] px-4 py-2 font-medium text-white shadow-sm transition hover:bg-[var(--brand-blue-dark)] disabled:opacity-60" disabled={isSaving} type="submit">
               {editingId ? 'Save project' : 'Create project'}
             </button>
           </div>
@@ -416,7 +403,6 @@ export default function ProjectsPage() {
             </table>
           </div>
         </section>
-      </div>
-    </main>
+    </AppShell>
   );
 }
