@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/session';
+import { requirePermission } from '@/lib/permissions';
 
 type ProjectBody = {
   name?: string;
@@ -26,7 +27,7 @@ export async function GET() {
   const userId = await getCurrentUserId();
 
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Необходим вход в систему' }, { status: 401 });
   }
 
   const [clients, projects] = await Promise.all([
@@ -47,17 +48,17 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const userId = await getCurrentUserId();
+  const auth = await requirePermission('directories.edit');
 
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   const body = (await request.json()) as ProjectBody;
   const name = body.name?.trim();
 
   if (!name || !body.clientId) {
-    return NextResponse.json({ error: 'Project name and client are required' }, { status: 400 });
+    return NextResponse.json({ error: 'Укажите название проекта и клиента' }, { status: 400 });
   }
 
   const client = await prisma.client.findUnique({
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
   });
 
   if (!client) {
-    return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    return NextResponse.json({ error: 'Клиент не найден' }, { status: 404 });
   }
 
   const project = await prisma.project.create({
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
       budgetMoney: optionalNumber(body.budgetMoney),
       rate: optionalNumber(body.rate),
       status: body.status ?? 'ACTIVE',
-      users: { connect: { id: userId } },
+      users: { connect: { id: auth.session!.user.id } },
       activities: {
         create: {
           name: 'General',

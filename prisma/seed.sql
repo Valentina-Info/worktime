@@ -5,7 +5,7 @@ VALUES (
   'test@example.com',
   'Test User',
   '$2b$10$HvbUszPd.fR9x.OnXhJOMOai.rAG34hX7OaM07a4SKnparpncki..',
-  'USER',
+  'ADMIN',
   NOW(),
   NOW()
 )
@@ -99,3 +99,50 @@ VALUES ('demo-project-id', 'test-user-id')
 ON CONFLICT ("A", "B") DO NOTHING;
 
 SELECT 'Demo client, project, and activity are ready' as result;
+
+INSERT INTO "Organization" (id, name, inn, kpp, "createdAt", "updatedAt")
+VALUES (
+  'infolink-organization-id',
+  'ООО «ИнфоЛинк»',
+  '',
+  '',
+  NOW(),
+  NOW()
+)
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  inn = EXCLUDED.inn,
+  kpp = EXCLUDED.kpp,
+  "updatedAt" = NOW();
+
+INSERT INTO "Department" (id, name, "organizationId", "createdAt", "updatedAt")
+VALUES (
+  'main-department-id',
+  'Основное подразделение',
+  'infolink-organization-id',
+  NOW(),
+  NOW()
+)
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  "organizationId" = EXCLUDED."organizationId",
+  "updatedAt" = NOW();
+
+INSERT INTO "Position" (id, title, "departmentId", "createdAt", "updatedAt")
+VALUES (
+  'admin-position-id',
+  'Администратор системы',
+  'main-department-id',
+  NOW(),
+  NOW()
+)
+ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title,
+  "departmentId" = EXCLUDED."departmentId",
+  "updatedAt" = NOW();
+
+UPDATE "User"
+SET "positionId" = 'admin-position-id'
+WHERE email = 'test@example.com';
+
+SELECT 'Organization structure is ready' as result;

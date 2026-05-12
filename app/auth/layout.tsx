@@ -1,6 +1,6 @@
 export const metadata = {
-  title: 'Sign in | Trackdesk',
-  description: 'Open your Trackdesk workspace',
+  title: 'Вход | ИнфоЛинк Трудоучет',
+  description: 'Вход в программу ИнфоЛинк Трудоучет',
 };
 
 export default function AuthLayout({

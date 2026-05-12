@@ -35,6 +35,8 @@ model User {
   role      Role     @default(USER)
   teamId    String?
   team      Team?    @relation(fields: [teamId], references: [id])
+  positionId String?
+  position  Position? @relation(fields: [positionId], references: [id])
   rate      Float?   // personal rate
   avatar    String?
   createdAt DateTime @default(now())
@@ -43,6 +45,7 @@ model User {
   timeEntries TimeEntry[]
   expenses    Expense[]
   assignedProjects Project[] @relation("ProjectUsers")
+  calendarLocks TimeDayLock[]
 }
 
 model Team {
@@ -50,6 +53,39 @@ model Team {
   name      String
   users     User[]
   createdAt DateTime @default(now())
+}
+
+model Organization {
+  id          String       @id @default(cuid())
+  name        String
+  inn         String
+  kpp         String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  departments Department[]
+}
+
+model Department {
+  id             String       @id @default(cuid())
+  name           String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  positions      Position[]
+}
+
+model Position {
+  id           String     @id @default(cuid())
+  title        String
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  users        User[]
 }
 
 model Client {
@@ -120,6 +156,16 @@ model TimeEntry {
   locked      Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model TimeDayLock {
+  id          String   @id @default(cuid())
+  dateKey     String   @unique
+  locked      Boolean  @default(true)
+  lockedById  String
+  lockedBy    User     @relation(fields: [lockedById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Expense {

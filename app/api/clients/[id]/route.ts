@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getCurrentUserId } from '@/lib/session';
+import { requirePermission } from '@/lib/permissions';
 
 type ClientBody = {
   name?: string;
@@ -23,10 +23,10 @@ function normalizeCurrency(value: string | undefined) {
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const userId = await getCurrentUserId();
+  const auth = await requirePermission('directories.edit');
 
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   const { id } = await params;
@@ -34,7 +34,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const name = body.name?.trim();
 
   if (!name) {
-    return NextResponse.json({ error: 'Client name is required' }, { status: 400 });
+    return NextResponse.json({ error: 'Укажите название клиента' }, { status: 400 });
   }
 
   const exists = await prisma.client.findUnique({
@@ -43,7 +43,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   });
 
   if (!exists) {
-    return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    return NextResponse.json({ error: 'Клиент не найден' }, { status: 404 });
   }
 
   const client = await prisma.client.update({
@@ -69,4 +69,38 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   });
 
   return NextResponse.json({ client });
+}
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requirePermission('directories.delete');
+
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const { id } = await params;
+  const client = await prisma.client.findUnique({
+    where: { id },
+    include: {
+      _count: {
+        select: {
+          projects: true,
+          expenses: true,
+          invoices: true,
+        },
+      },
+    },
+  });
+
+  if (!client) {
+    return NextResponse.json({ error: 'Клиент не найден' }, { status: 404 });
+  }
+
+  if (client._count.projects || client._count.expenses || client._count.invoices) {
+    return NextResponse.json({ error: 'У клиента есть связанные записи. Перенесите его в архив.' }, { status: 409 });
+  }
+
+  await prisma.client.delete({ where: { id } });
+
+  return NextResponse.json({ success: true });
 }

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
+import { can, normalizeRole, roleLabels, type Permission } from '@/lib/access-control';
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -11,16 +12,22 @@ type AppShellProps = {
   title: string;
   subtitle?: string;
   userEmail?: string | null;
+  userRole?: string | null;
 };
 
-const navItems = [
-  { href: '/', label: 'Time' },
-  { href: '/clients', label: 'Clients' },
-  { href: '/projects', label: 'Projects' },
+const navItems: Array<{ href: string; label: string; permission: Permission }> = [
+  { href: '/', label: 'Время', permission: 'time.view' },
+  { href: '/clients', label: 'Клиенты', permission: 'directories.view' },
+  { href: '/projects', label: 'Проекты', permission: 'directories.view' },
+  { href: '/activities', label: 'Активности', permission: 'directories.view' },
+  { href: '/reports', label: 'Отчеты', permission: 'reports.team' },
+  { href: '/users', label: 'Пользователи', permission: 'users.manage' },
 ];
 
-export default function AppShell({ children, eyebrow, title, subtitle, userEmail }: AppShellProps) {
+export default function AppShell({ children, eyebrow, title, subtitle, userEmail, userRole }: AppShellProps) {
   const pathname = usePathname();
+  const visibleNavItems = navItems.filter((item) => can(userRole, item.permission));
+  const displayedRole = userRole ? roleLabels[normalizeRole(userRole)] : null;
 
   return (
     <main className="min-h-screen bg-[var(--surface-muted)] text-slate-950">
@@ -29,33 +36,36 @@ export default function AppShell({ children, eyebrow, title, subtitle, userEmail
           <div className="flex items-center justify-between gap-4 lg:block">
             <Link href="/" className="block">
               <Image
-                alt="Инфолинк"
+                alt="ИнфоЛинк Трудоучет"
                 className="h-auto w-40"
                 height={54}
                 priority
                 src="/infolink-logo.png"
                 width={230}
               />
-              <div className="mt-3 hidden text-xs font-medium text-slate-500 sm:block">Time, clients, projects</div>
+              <div className="mt-3 hidden sm:block">
+                <div className="text-sm font-semibold text-slate-900">ИнфоЛинк Трудоучет</div>
+                <div className="mt-1 text-xs font-medium text-slate-500">Время, клиенты, проекты</div>
+              </div>
             </Link>
             <button
-              className="rounded-md border border-sky-100 px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50 lg:hidden"
+              className="btn-secondary px-3 py-2 text-sm lg:hidden"
               onClick={() => signOut()}
               type="button"
             >
-              Sign out
+              Выйти
             </button>
           </div>
 
           <nav className="mt-4 flex gap-2 overflow-x-auto lg:mt-8 lg:grid">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const isActive = pathname === item.href;
 
               return (
                 <Link
                   className={
                     isActive
-                      ? 'rounded-md bg-[var(--brand-blue)] px-3 py-2 text-sm font-medium text-white shadow-sm shadow-blue-200'
+                      ? 'state-active rounded-md px-3 py-2 text-sm font-semibold shadow-sm'
                       : 'rounded-md px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-cyan-50 hover:text-slate-950'
                   }
                   href={item.href}
@@ -67,15 +77,16 @@ export default function AppShell({ children, eyebrow, title, subtitle, userEmail
             })}
           </nav>
 
-          <div className="mt-8 hidden rounded-lg border border-cyan-100 bg-cyan-50/70 p-4 lg:block">
-            <div className="text-xs font-medium uppercase tracking-wide text-cyan-700">Signed in</div>
-            <div className="mt-2 break-words text-sm font-medium text-slate-800">{userEmail ?? 'Workspace user'}</div>
+          <div className="ui-card ui-card-compact mt-8 hidden bg-cyan-50/70 lg:block">
+            <div className="text-xs font-medium uppercase tracking-wide text-cyan-700">Вход выполнен</div>
+            <div className="mt-2 break-words text-sm font-medium text-slate-800">{userEmail ?? 'Пользователь'}</div>
+            {displayedRole && <div className="mt-1 text-xs font-semibold text-[var(--brand-blue)]">{displayedRole}</div>}
             <button
-              className="mt-4 w-full rounded-md bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm ring-1 ring-cyan-100 transition hover:bg-cyan-50"
+              className="btn-secondary mt-4 w-full px-3 py-2 text-sm"
               onClick={() => signOut()}
               type="button"
             >
-              Sign out
+              Выйти
             </button>
           </div>
         </aside>

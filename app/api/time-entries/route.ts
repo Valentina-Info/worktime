@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getCurrentUserId } from '@/lib/session';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { can } from '@/lib/access-control';
 
 type CreateTimeEntryBody = {
   projectId?: string;
@@ -11,6 +13,7 @@ type CreateTimeEntryBody = {
   description?: string;
   billable?: boolean;
   tags?: string[];
+  dateKey?: string;
 };
 
 function parseDate(value: string | undefined) {
@@ -27,17 +30,40 @@ function parseDate(value: string | undefined) {
   return date;
 }
 
-export async function GET() {
-  const userId = await getCurrentUserId();
+function toDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+export async function GET(request: Request) {
+  const session = await getServerSession(authOptions);
+  const userId = session?.user?.id;
 
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Необходим вход в систему' }, { status: 401 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const from = parseDate(searchParams.get('from') ?? undefined);
+  const to = parseDate(searchParams.get('to') ?? undefined);
+
   const entries = await prisma.timeEntry.findMany({
-    where: { userId },
+    where: {
+      userId,
+      ...(from || to
+        ? {
+            startTime: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lt: to } : {}),
+            },
+          }
+        : {}),
+    },
     orderBy: { startTime: 'desc' },
-    take: 50,
+    take: 500,
     include: {
       project: {
         select: {
@@ -54,10 +80,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const userId = await getCurrentUserId();
+  const session = await getServerSession(authOptions);
+  const userId = session?.user?.id;
 
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Необходим вход в систему' }, { status: 401 });
   }
 
   const body = (await request.json()) as CreateTimeEntryBody;
@@ -66,7 +93,58 @@ export async function POST(request: Request) {
   const duration = Number(body.duration);
 
   if (!body.projectId || !body.activityId || !startTime || !Number.isFinite(duration) || duration <= 0) {
-    return NextResponse.json({ error: 'Invalid time entry data' }, { status: 400 });
+    return NextResponse.json({ error: 'Некорректные данные записи времени' }, { status: 400 });
+  }
+
+  const dateKey = body.dateKey && /^\d{4}-\d{2}-\d{2}$/.test(body.dateKey) ? body.dateKey : toDateKey(startTime);
+
+  if (!can(session.user.role, 'time.lock')) {
+    const lock = await prisma.timeDayLock.findUnique({
+      where: { dateKey },
+      select: { id: true },
+    });
+
+    if (lock) {
+      return NextResponse.json({ error: 'Эта дата закрыта для редактирования' }, { status: 423 });
+    }
+  }
+
+  const entryEndTime = endTime ?? new Date(startTime.getTime() + Math.round(duration) * 60000);
+  const overlappingEntry = await prisma.timeEntry.findFirst({
+    where: {
+      userId,
+      startTime: { lt: entryEndTime },
+      OR: [
+        { endTime: { gt: startTime } },
+        {
+          endTime: null,
+          startTime: { gt: new Date(startTime.getTime() - 24 * 60 * 60000) },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      startTime: true,
+      endTime: true,
+      duration: true,
+      project: { select: { name: true } },
+    },
+  });
+
+  if (overlappingEntry) {
+    return NextResponse.json(
+      {
+        error: 'Запись пересекается с уже внесенной работой',
+        conflict: {
+          id: overlappingEntry.id,
+          startTime: overlappingEntry.startTime,
+          endTime: overlappingEntry.endTime,
+          duration: overlappingEntry.duration,
+          projectName: overlappingEntry.project.name,
+        },
+      },
+      { status: 409 },
+    );
   }
 
   const [project, activity] = await Promise.all([
@@ -75,11 +153,11 @@ export async function POST(request: Request) {
   ]);
 
   if (!project || !activity) {
-    return NextResponse.json({ error: 'Project or activity not found' }, { status: 404 });
+    return NextResponse.json({ error: 'Проект или активность не найдены' }, { status: 404 });
   }
 
   if (activity.projectId && activity.projectId !== project.id) {
-    return NextResponse.json({ error: 'Activity does not belong to selected project' }, { status: 400 });
+    return NextResponse.json({ error: 'Активность не относится к выбранному проекту' }, { status: 400 });
   }
 
   const entry = await prisma.timeEntry.create({

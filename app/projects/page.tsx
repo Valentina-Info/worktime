@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import AppShell from '@/components/AppShell';
+import ActionButton from '@/components/ActionButton';
+import { can } from '@/lib/access-control';
 
 type Client = {
   id: string;
@@ -86,6 +88,10 @@ export default function ProjectsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const canViewDirectories = can(session?.user?.role, 'directories.view');
+  const canEditDirectories = can(session?.user?.role, 'directories.edit');
+  const canDeleteDirectories = can(session?.user?.role, 'directories.delete');
 
   useEffect(() => {
     if (status === 'loading') {
@@ -106,7 +112,7 @@ export default function ProjectsPage() {
       const response = await fetch('/api/projects');
 
       if (!response.ok) {
-        setError('Failed to load projects');
+        setError('Не удалось загрузить проекты');
         return;
       }
 
@@ -119,12 +125,31 @@ export default function ProjectsPage() {
       }));
     }
 
-    loadProjects().catch(() => setError('Failed to load projects'));
+    loadProjects().catch(() => setError('Не удалось загрузить проекты'));
   }, [session]);
 
   const activeClients = useMemo(() => clients.filter((client) => client.status === 'ACTIVE'), [clients]);
   const activeProjects = useMemo(() => projects.filter((project) => project.status === 'ACTIVE').length, [projects]);
   const archivedProjects = projects.length - activeProjects;
+  const visibleProjects = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    if (!query) {
+      return projects;
+    }
+
+    return projects.filter((project) =>
+      [
+        project.name,
+        project.client.name,
+        project.description,
+        project.client.currency,
+        project.status === 'ACTIVE' ? 'активный' : 'архивный',
+      ]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(query)),
+    );
+  }, [projects, searchQuery]);
 
   function updateForm(field: keyof ProjectForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -157,7 +182,7 @@ export default function ProjectsPage() {
 
     if (!response.ok) {
       const data = await response.json().catch(() => null);
-      setError(data?.error ?? 'Failed to save project');
+      setError(data?.error ?? 'Не удалось сохранить проект');
       return;
     }
 
@@ -189,7 +214,7 @@ export default function ProjectsPage() {
     setIsSaving(false);
 
     if (!response.ok) {
-      setError('Failed to update project status');
+      setError('Не удалось изменить статус проекта');
       return;
     }
 
@@ -197,48 +222,87 @@ export default function ProjectsPage() {
     setProjects((current) => current.map((item) => (item.id === project.id ? data.project : item)));
   }
 
+  async function deleteProject(project: Project) {
+    if (!window.confirm(`Удалить проект "${project.name}"?`)) {
+      return;
+    }
+
+    setIsSaving(true);
+    setError('');
+
+    const response = await fetch(`/api/projects/${project.id}`, { method: 'DELETE' });
+
+    setIsSaving(false);
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      setError(data?.error ?? 'Не удалось удалить проект');
+      return;
+    }
+
+    setProjects((current) => current.filter((item) => item.id !== project.id));
+  }
+
   if (status === 'loading' || !session) {
-    return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
+    return <div className="flex min-h-screen items-center justify-center">Загрузка...</div>;
+  }
+
+  if (!canViewDirectories) {
+    return (
+      <AppShell
+        eyebrow="Справочник"
+        subtitle="Ваша роль не дает доступа к справочнику проектов."
+        title="Проекты"
+        userEmail={session.user?.email}
+        userRole={session.user?.role}
+      >
+        <div className="rounded-lg border border-red-100 bg-red-50 p-5 text-sm text-red-700">
+          У вас нет прав на просмотр этой формы.
+        </div>
+      </AppShell>
+    );
   }
 
   return (
     <AppShell
-      eyebrow="Directory"
-      subtitle="Keep project budgets, rates, activity usage, and archive state in one place."
-      title="Projects"
+      eyebrow="Справочник"
+      subtitle="Ведите бюджеты, ставки, активности и архивный статус проектов в одном месте."
+      title="Проекты"
       userEmail={session.user?.email}
+      userRole={session.user?.role}
     >
 
         {error && <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
         <section className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-sm text-slate-500">Total</div>
+          <div className="ui-card ui-card-compact">
+            <div className="text-sm text-slate-500">Всего</div>
             <div className="mt-1 text-2xl font-semibold">{projects.length}</div>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-sm text-slate-500">Active</div>
+          <div className="ui-card ui-card-compact">
+            <div className="text-sm text-slate-500">Активные</div>
             <div className="mt-1 text-2xl font-semibold">{activeProjects}</div>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-sm text-slate-500">Archived</div>
+          <div className="ui-card ui-card-compact">
+            <div className="text-sm text-slate-500">Архивные</div>
             <div className="mt-1 text-2xl font-semibold">{archivedProjects}</div>
           </div>
         </section>
 
-        <form className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm" onSubmit={saveProject}>
+        {canEditDirectories && (
+        <form className="ui-card ui-card-section" onSubmit={saveProject}>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-lg font-semibold">{editingId ? 'Edit project' : 'New project'}</h2>
+            <h2 className="text-lg font-semibold">{editingId ? 'Редактировать проект' : 'Новый проект'}</h2>
             {editingId && (
               <button className="text-sm font-medium text-slate-600" type="button" onClick={resetForm}>
-                Cancel editing
+                Отменить редактирование
               </button>
             )}
           </div>
 
           <div className="mt-5 grid gap-4 lg:grid-cols-2">
             <label className="grid gap-1 text-sm font-medium">
-              Name
+              Название
               <input
                 className="rounded-md border border-slate-300 px-3 py-2"
                 required
@@ -248,7 +312,7 @@ export default function ProjectsPage() {
             </label>
 
             <label className="grid gap-1 text-sm font-medium">
-              Client
+              Клиент
               <select
                 className="rounded-md border border-slate-300 px-3 py-2"
                 required
@@ -264,7 +328,7 @@ export default function ProjectsPage() {
             </label>
 
             <label className="grid gap-1 text-sm font-medium">
-              Rate
+              Ставка
               <input
                 className="rounded-md border border-slate-300 px-3 py-2"
                 min="0"
@@ -276,7 +340,7 @@ export default function ProjectsPage() {
             </label>
 
             <label className="grid gap-1 text-sm font-medium">
-              Budget hours
+              Бюджет, часы
               <input
                 className="rounded-md border border-slate-300 px-3 py-2"
                 min="0"
@@ -288,7 +352,7 @@ export default function ProjectsPage() {
             </label>
 
             <label className="grid gap-1 text-sm font-medium">
-              Budget money
+              Бюджет, деньги
               <input
                 className="rounded-md border border-slate-300 px-3 py-2"
                 min="0"
@@ -300,19 +364,19 @@ export default function ProjectsPage() {
             </label>
 
             <label className="grid gap-1 text-sm font-medium">
-              Status
+              Статус
               <select
                 className="rounded-md border border-slate-300 px-3 py-2"
                 value={form.status}
                 onChange={(event) => updateForm('status', event.target.value)}
               >
-                <option value="ACTIVE">Active</option>
-                <option value="ARCHIVED">Archived</option>
+                <option value="ACTIVE">Активный</option>
+                <option value="ARCHIVED">Архивный</option>
               </select>
             </label>
 
             <label className="grid gap-1 text-sm font-medium lg:col-span-2">
-              Description
+              Описание
               <textarea
                 className="min-h-24 rounded-md border border-slate-300 px-3 py-2"
                 value={form.description}
@@ -322,31 +386,41 @@ export default function ProjectsPage() {
           </div>
 
           <div className="mt-5 flex justify-end">
-            <button className="rounded-md bg-[var(--brand-blue)] px-4 py-2 font-medium text-white shadow-sm transition hover:bg-[var(--brand-blue-dark)] disabled:opacity-60" disabled={isSaving} type="submit">
-              {editingId ? 'Save project' : 'Create project'}
+            <button className="btn-primary px-4 py-2 disabled:opacity-60" disabled={isSaving} type="submit">
+              {editingId ? 'Сохранить проект' : 'Создать проект'}
             </button>
           </div>
         </form>
+        )}
 
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-5 py-4">
-            <h2 className="text-lg font-semibold">Project list</h2>
+        <section className="ui-card">
+          <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+            <h2 className="text-lg font-semibold">Список проектов</h2>
+            <label className="w-full max-w-sm">
+              <span className="sr-only">Поиск проектов</span>
+              <input
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                placeholder="Поиск по проектам"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
+            </label>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] border-collapse text-left text-sm">
-              <thead className="bg-slate-100 text-slate-600">
+              <thead className="table-head">
                 <tr>
-                  <th className="px-5 py-3 font-medium">Name</th>
-                  <th className="px-5 py-3 font-medium">Client</th>
-                  <th className="px-5 py-3 font-medium">Rate</th>
-                  <th className="px-5 py-3 font-medium">Budget</th>
-                  <th className="px-5 py-3 font-medium">Usage</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium">Actions</th>
+                  <th className="px-5 py-3 font-medium">Название</th>
+                  <th className="px-5 py-3 font-medium">Клиент</th>
+                  <th className="px-5 py-3 font-medium">Ставка</th>
+                  <th className="px-5 py-3 font-medium">Бюджет</th>
+                  <th className="px-5 py-3 font-medium">Использование</th>
+                  <th className="px-5 py-3 font-medium">Статус</th>
+                  <th className="px-5 py-3 font-medium">Действия</th>
                 </tr>
               </thead>
               <tbody>
-                {projects.map((project) => (
+                {visibleProjects.map((project) => (
                   <tr key={project.id} className="border-t border-slate-100">
                     <td className="px-5 py-3">
                       <div className="font-medium">{project.name}</div>
@@ -361,8 +435,8 @@ export default function ProjectsPage() {
                       </div>
                     </td>
                     <td className="px-5 py-3">
-                      <div>{project._count.timeEntries} entries</div>
-                      <div className="text-slate-500">{project._count.activities} activities</div>
+                      <div>{project._count.timeEntries} записей</div>
+                      <div className="text-slate-500">{project._count.activities} активностей</div>
                     </td>
                     <td className="px-5 py-3">
                       <span
@@ -372,30 +446,35 @@ export default function ProjectsPage() {
                             : 'rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600'
                         }
                       >
-                        {project.status === 'ACTIVE' ? 'Active' : 'Archived'}
+                        {project.status === 'ACTIVE' ? 'Активный' : 'Архивный'}
                       </span>
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex gap-2">
-                        <button className="rounded-md border border-slate-300 px-3 py-1.5 font-medium" type="button" onClick={() => startEdit(project)}>
-                          Edit
-                        </button>
-                        <button
-                          className="rounded-md border border-slate-300 px-3 py-1.5 font-medium"
+                        <ActionButton icon="edit" label="Изменить" onClick={() => startEdit(project)} tone="primary" />
+                        <ActionButton
                           disabled={isSaving}
-                          type="button"
+                          icon={project.status === 'ACTIVE' ? 'archive' : 'restore'}
+                          label={project.status === 'ACTIVE' ? 'В архив' : 'Восстановить'}
                           onClick={() => toggleArchive(project)}
-                        >
-                          {project.status === 'ACTIVE' ? 'Archive' : 'Restore'}
-                        </button>
+                        />
+                        {canDeleteDirectories && (
+                          <ActionButton
+                            disabled={isSaving}
+                            icon="trash"
+                            label="Удалить"
+                            onClick={() => deleteProject(project)}
+                            tone="danger"
+                          />
+                        )}
                       </div>
                     </td>
                   </tr>
                 ))}
-                {!projects.length && (
+                {!visibleProjects.length && (
                   <tr>
                     <td className="px-5 py-8 text-center text-slate-500" colSpan={7}>
-                      No projects yet.
+                      {searchQuery ? 'Проекты не найдены.' : 'Проектов пока нет.'}
                     </td>
                   </tr>
                 )}

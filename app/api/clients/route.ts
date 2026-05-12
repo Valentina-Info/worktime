@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/session';
+import { requirePermission } from '@/lib/permissions';
 
 type ClientBody = {
   name?: string;
@@ -26,7 +27,7 @@ export async function GET() {
   const userId = await getCurrentUserId();
 
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Необходим вход в систему' }, { status: 401 });
   }
 
   const clients = await prisma.client.findMany({
@@ -46,17 +47,17 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const userId = await getCurrentUserId();
+  const auth = await requirePermission('directories.edit');
 
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (auth.error) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   const body = (await request.json()) as ClientBody;
   const name = body.name?.trim();
 
   if (!name) {
-    return NextResponse.json({ error: 'Client name is required' }, { status: 400 });
+    return NextResponse.json({ error: 'Укажите название клиента' }, { status: 400 });
   }
 
   const client = await prisma.client.create({
